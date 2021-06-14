@@ -1,0 +1,575 @@
+---
+title: "Final_Project"
+author: "Krati Patidar"
+date: "12/8/2020"
+output: word_document
+---
+```{r setting the working directory}
+setwd("/Users/kratipatidar/Desktop/mis_620")
+```
+
+```{r reading and checking the data}
+ab_nyc <- read.csv('/Users/kratipatidar/Desktop/mis_620/archive/AB_NYC_2019.csv')
+head(ab_nyc)
+```
+
+```{r Descriptive Statistics on Dependent And Independent Variable}
+library(Hmisc)
+describe(ab_nyc)
+```
+```{r unique values in neighbourhood group}
+unique(ab_nyc[c("neighbourhood_group")])
+```
+```{r feature engineering 1}
+# Firstly, we add a new column for the average hotel prices per night in each of the neighbourhood groups of NY
+index <- c("Brooklyn", "Manhattan", "Queens", "Staten Island", "Bronx")
+values <- c(174, 277, 140.06, 137.21, 138)
+ab_nyc$avg_hotel_price <- values[match(ab_nyc$neighbourhood_group, index)]
+head(ab_nyc)
+```
+```{r feature engineering 2}
+# Now, we create a new column min_cost as min_cost = price*minimum_nights
+ab_nyc$min_cost <- ab_nyc$price*ab_nyc$minimum_nights
+
+# The next column we create would be the availability ratio as availability_ratio = availability_365/365
+ab_nyc$availability_ratio <- ab_nyc$availability_365/365
+
+# The final column that I create would be the reviews per year column, as follows-
+ab_nyc$reviews_per_year <- ab_nyc$reviews_per_month*12
+
+head(ab_nyc)
+```
+
+```{r Distribution Plots for Independent Variables}
+par(mfrow=c(3,3))
+hist(ab_nyc$id)
+hist(ab_nyc$host_id)
+hist(ab_nyc$latitude)
+hist(ab_nyc$longitude)
+hist(ab_nyc$number_of_reviews)
+hist(ab_nyc$reviews_per_month)
+hist(ab_nyc$calculated_host_listings_count)
+hist(ab_nyc$availability_365)
+hist(ab_nyc$minimum_nights)
+hist(ab_nyc$avg_hotel_price)
+hist(ab_nyc$min_cost)
+hist(ab_nyc$availability_ratio)
+hist(ab_nyc$reviews_per_year)
+
+```
+```{r EDA 1}
+# Using the group_by() and summarise() functions of dplyr() package
+## Average Price of each of the 5 Neighbourhood Groups 
+library(dplyr)
+NAnalysis <- ab_nyc %>% 
+  group_by(neighbourhood_group) %>% summarise(Mean_Price = mean(price))
+
+# Plotting the graph using ggplot()
+
+ggplot(NAnalysis, aes(x = reorder(neighbourhood_group, -Mean_Price), y = Mean_Price)) + 
+  geom_bar(stat="identity",colour="black", fill = "tomato3") + 
+  labs(title="Average Price of Rooms in each Neighbourhood Group") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5), legend.position = c(0.8, 0.5)) + xlab("") + ylab("Mean Price")
+
+```
+```{r EDA 2}
+## Analyzing and Visualizing Top 10 Neighborhoods of New York City
+
+NeighbourAnalysis <- ab_nyc %>% 
+  group_by(neighbourhood) %>% summarise(Mean_Price = mean(price))
+
+nan <- NeighbourAnalysis[with(NeighbourAnalysis,order(-Mean_Price)),]
+
+nan <- nan[1:10,]
+
+ggplot(nan, aes(x = reorder(neighbourhood, -Mean_Price), y = Mean_Price)) + 
+  geom_bar(stat="identity",colour="black", fill = "blue") + 
+  labs(title="Average Price of Rooms in each Neighbourhood", subtitle = "Top 10 Costliest Neighbourhoods") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5), legend.position = c(0.8, 0.5), axis.text.x = element_text(angle = 90)) + xlab("") + ylab("Mean Price")
+
+
+```
+```{r EDA 3}
+## Counting the Number of Rooms in New York Neighborhood
+
+countAnalysis <- ab_nyc %>% filter(number_of_reviews > 100) %>% 
+  group_by(neighbourhood) %>% summarise(Count = n())
+
+countrooms <- countAnalysis[with(countAnalysis,order(-Count)),]
+
+countrooms <- countrooms[1:20,]
+
+ggplot(countrooms, aes(x = reorder(neighbourhood, Count), y = Count)) + 
+  geom_bar(stat="identity",colour="black", fill = "pink") + 
+  labs(title="Top 20 Neighbourhoods with The Highest Number of Rooms",subtitle = "Rooms with Number of Reviews greater than 100") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5), legend.position = c(0.8, 0.5)) + xlab("") + ylab("Mean Price") + coord_flip()
+
+```
+```{r EDA 4}
+# Comparison of Mean Price of Each Neighborhood Group and Room Type
+
+price_roomtype <- ab_nyc %>% 
+  group_by(neighbourhood_group, room_type) %>% summarise(Mean_Price = mean(price))
+
+
+ggplot(price_roomtype, aes(x = reorder(neighbourhood_group, -Mean_Price), y = Mean_Price, fill = room_type)) + 
+  geom_bar(stat="identity",colour="black",position=position_dodge()) + 
+  labs(title="Comparison of Mean Price of each Neighbourhood Group according to Type of The Room") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5), legend.position = c(0.9, 0.8)) + xlab("") + ylab("Mean Price")
+
+```
+```{r EDA 5}
+
+ggplot(ab_nyc, aes(y = price,x = minimum_nights, color = neighbourhood_group)) +
+  geom_jitter() + geom_smooth(colour="red") + xlim(0,366)
+
+```
+```{r Identifying Missing Data or Errors in Data}
+#first looking at the missing values
+colSums(is.na(ab_nyc))
+table(is.na(ab_nyc))
+
+```
+
+```{r Tackling Missing Values}
+#reviews per month is missing 10052 observations. Since this column is important for modeling, we'll replace the missing values with the column mean.
+
+ab_nyc$reviews_per_month[is.na(ab_nyc$reviews_per_month)] <- round(mean(ab_nyc$reviews_per_month, na.rm = TRUE))
+
+#making corresponding changes to the reviews_per_year column
+ab_nyc$reviews_per_year <- ab_nyc$reviews_per_month*12
+
+#checking again
+colSums(is.na(ab_nyc))
+
+##There are missing values in name, host_name, last_review as well, however these columns are not important from analysis point of view, so we will drop these columns from the dataset.
+
+##For my analysis, I will drop the columns which don't contribute to my modeling methods.
+
+drops <- c("id", "name", "host_id", "host_name", "neighbourhood", "latitude", "longitude","last_review")
+
+ab_nyc_filtered <- ab_nyc[ , !(names(ab_nyc) %in% drops)]
+head(ab_nyc_filtered)
+```
+```{r Dummy Coding}
+#Here, we dummy code the neighborhood group and room_type columns, as they will be used in further analysis
+library(caret)
+dmy <- dummyVars( ~., data = ab_nyc_filtered)
+ab_nyc_dc <- data.frame(predict(dmy, newdata = ab_nyc_filtered))
+head(ab_nyc_dc)
+```
+```{r Doing a train test split and temporarily removing the dependent variable}
+
+# doing a train-test split
+
+set.seed(3456)
+train_index <- createDataPartition(ab_nyc_dc$price, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+head(train_index)
+
+#create training set subset (80%)
+ab_nyc_train <- ab_nyc_dc[train_index,]
+
+#create test set subset (20%)
+ab_nyc_test  <- ab_nyc_dc[-train_index,]
+
+# temporarily removing the dependent variable from training and test sets
+ab_nyc_train_iv <- ab_nyc_train[, -9]
+ab_nyc_test_iv <- ab_nyc_test[, -9]
+head(ab_nyc_test_iv)
+head(ab_nyc_train_iv)
+
+```
+```{r checking correlation between predictors}
+library(corrplot)
+
+#first create correlation matrix of variables
+corr_matrix <-  cor(ab_nyc_train_iv)
+
+#summarize the correlations 
+summary(corr_matrix[upper.tri(corr_matrix)])
+
+#looking at variables with high correlation
+high_corr <- findCorrelation(corr_matrix, cutoff = .75)
+high_corr
+
+#filter out these variables from dataset
+train_iv_nocorr <- ab_nyc_train_iv[,-high_corr]
+head(train_iv_nocorr)
+
+#create new correlation matrix to verify
+corr_matrix_2 <- cor(train_iv_nocorr)
+summary(corr_matrix_2[upper.tri(corr_matrix_2)]) #no correlations greater than .75
+
+#some of the predictors that I wanted to work with for my analysis were removed because of high correlation. I may use two different datasets for training, one with these predictors present, and the other with these predictors absent.
+```
+
+
+```{r Pre-Processing - dataset with no correlated variables}
+library(AppliedPredictiveModeling)
+library(e1071)
+pp_no_nzv1 <- preProcess(train_iv_nocorr, 
+                        method = c("center", "scale", "BoxCox", "nzv"))
+pp_no_nzv1
+train_transformed <- predict(pp_no_nzv1, newdata = train_iv_nocorr)
+head(train_transformed)
+```
+```{r Pre-Processing - dataset with correlated variables}
+library(AppliedPredictiveModeling)
+library(e1071)
+pp_no_nzv2 <- preProcess(ab_nyc_train_iv, 
+                        method = c("center", "scale", "BoxCox", "nzv"))
+pp_no_nzv2
+train_transformed2 <- predict(pp_no_nzv2, newdata = ab_nyc_train_iv)
+head(train_transformed2)
+
+```
+```{r Copying back the dependent variable to both training sets}
+train_transformed$price <- ab_nyc_train$price
+train_transformed2$price <- ab_nyc_train$price
+
+```
+
+```{r defining the control function}
+library(caret)
+fitControl <- trainControl(method = "cv",   
+                           number = 5     # number of folds
+                                  )
+```
+
+```{r Training Linear regression on dataset with no correlated predictors}
+set.seed(400)
+train_lm <- train(price ~.,
+               data = train_transformed,
+               method = "lm",  
+               trControl = fitControl)
+train_lm
+#we can review what variables were most important
+varImp(train_lm)
+
+#we can also review the final trained model 
+summary(train_lm)
+
+# The RMSE value is very high, further analysis needs to be conducted for improving the model.
+```
+```{r Training Linear Regression Model on dataset with correlated predictors}
+
+train_lm2 <- train(price ~.,
+               data = train_transformed2,
+               method = "lm",  
+               trControl = fitControl)
+train_lm2
+```
+
+
+```{r Training Lasso Regression Model}
+
+set.seed(400)
+train_lasso <- train(price ~ ., data=train_transformed, 
+                     method="lasso",tuneLength=10,
+                     trControl=fitControl)
+
+train_lasso
+
+#we can review what variables were most important
+varImp(train_lasso)
+
+#we can also review the final trained model 
+summary(train_lasso)
+
+```
+```{r Training a KNN model}
+set.seed(400)
+#set values of k to search through, K 1 to 10
+k.grid <- expand.grid(k=1:10)
+
+set.seed(400) #ALWAYS USE same SEED ACROSS trains to ensure identical cv folds
+train_knn <- train(price ~ ., data= train_transformed, method = "knn", 
+               tuneGrid=k.grid, trControl=fitControl)
+train_knn
+varImp(train_knn)
+
+#we can plot parameter performance
+plot(train_knn)
+
+```
+
+```{r Training a GAM Spline Model}
+set.seed(400)
+#gamSpline in caret will expand each predictor with smooth spline searching for df value
+train_gam <- train(price ~ ., data=train_transformed, 
+                    method="gamSpline",tuneLength=10,
+                    trControl=fitControl)
+train_gam
+
+
+```
+
+
+```{r Training a PC Regression Model}
+#pcr pca regression 
+library(pls)
+set.seed(400) #SEED
+train_pcr <- train(price ~ ., data= train_transformed, method = "pcr", 
+                   tuneLength=10, trControl=fitControl)
+train_pcr
+plot(train_pcr)
+
+```
+```{r Training a Ridge Regression Model}
+
+set.seed(400) #SEED
+train_ridge <- train(price ~ ., data= train_transformed, method = "ridge", 
+                   tuneLength=10, trControl=fitControl)
+train_ridge
+
+# looking at variable importance
+varImp(train_ridge)
+
+# looking at the final trained model
+summary(train_ridge)
+```
+
+```{r Training a Principal Leaset Squares Model}
+library(pls)
+set.seed(400) #SEED
+train_pls <- train(price ~ ., data= train_transformed, method = "pls", 
+                   tuneLength=10, trControl=fitControl)
+train_pls
+plot(train_pls)
+```
+```{r Training a Best Subset Selection- Forward Selection Model }
+
+#lcv on forward
+set.seed(400) #SEED
+train_tfwd <- train(price ~ ., data= train_transformed, method = "leapForward", tuneLength=10, trControl=fitControl)
+
+train_tfwd
+
+getTrainPerf(train_tfwd)
+
+```
+```{r Training a Best Subset Selection - Backward Selection Model}
+
+#lcv on backward
+set.seed(400) #SEED
+train_tbwd <- train(price ~ ., data= train_transformed, method = "leapBackward", tuneLength=10, trControl=fitControl)
+
+train_tbwd
+
+getTrainPerf(train_tbwd)
+```
+
+```{r Eliminating certain predictors}
+# In the regression models trained above, we notice that the reviews_per_year, calculated_host_listings_count and neighbourhood_groupQueens	do not contribute significantly to analysis, and have a very low ranking consistently. Let's see if removing these variables has any effect on the training performance of different regression models.
+
+drops_2 <- c("reviews_per_year", "calculated_host_listings_count", "neighbourhood_groupQueens")
+
+train_transformed_shrunk <- train_transformed[ , !(names(train_transformed) %in% drops_2)]
+head(train_transformed_shrunk)
+
+```
+
+```{r Looking if predictor elimination has any effect on model performance}
+
+set.seed(400)
+train_lm3 <- train(price ~.,
+               data = train_transformed_shrunk,
+               method = "lm",  
+               trControl = fitControl)
+train_lm3
+#we can review what variables were most important
+varImp(train_lm3)
+
+#we can also review the final trained model 
+summary(train_lm3)
+
+```
+
+```{r Result of the previous model}
+#Here we see that eliminating low-importance predictors did not have any significant effect on the RMSE and R-squared values. So, we will continue our modeling process with the train_transformed dataset.
+```
+
+
+```{r Regression Trees}
+#using rpart for regression tree
+library(rpart) #faster than tree
+library(tree) #has useful functions to use with rpart
+#rather than using default lets use new library
+library(rpart.plot)
+```
+
+```{r Random Forest}
+
+modelLookup("rf")
+set.seed(400)
+library(randomForest)
+
+#manually specify randforest parameters to search through
+rf.grid <- expand.grid(mtry=c(7,14,20,30, 40))
+
+train_rf<- randomForest(price ~ ., data= train_transformed,
+             tuneLength=10, trControl=fitControl)
+train_rf
+
+#we can review the variable importance
+varImp(train_rf)
+
+#plotting the parameter performance
+plot(train_rf)
+
+```
+
+
+```{r Decision Tree}
+#decision tree
+set.seed(400)
+train_rpart <- train(price ~ ., data=train_transformed, 
+                   method="rpart",tuneLength=10,
+                   trControl=fitControl)
+train_rpart
+```
+
+
+```{r Bagging Tree}
+
+set.seed(400)
+train_bag <- train(price ~ ., data=train_transformed, 
+                     method="treebag",tuneLength=10,
+                     trControl=fitControl)
+train_bag
+
+```
+
+
+```{r Boosting Tree}
+
+set.seed(400)
+train_boost <- train(price ~ ., data=train_transformed, 
+                     method="gbm",tuneLength=4,
+                     trControl=fitControl)
+
+```
+```{r Cleaning up the clusters}
+#registerDoSEQ()
+#cleaning up the cluster objects when finished
+stopCluster(cl)
+
+```
+
+```{r Training a Support Vector Machine Model }
+
+train_svm <- train(price ~ ., data=train_transformed, 
+                     method="svmLinear",
+                     trControl=fitControl)
+
+train_svm
+
+```
+
+
+```{r  Comparing Model Performance}
+
+#lets gather the models
+#first lets put all trained models in a list object
+models<- list("lm"=train_lm, "gam" = train_gam,
+              "lasso" = train_lasso, "PCR"=train_pcr, "ridge"=train_ridge,
+              "PLS"= train_pls, "ForwardSelection"=train_tfwd, 
+              "BackwardSelection"=train_tbwd,"KNN"=train_knn,
+              "DecisionTree"=train_rpart,
+              "BaggingTree"=train_bag, "BoostingTree"=train_boost)
+
+price.resamples<- resamples(models)
+summary(price.resamples)
+
+```
+
+```{r Plotting Performance}
+#plot performances
+bwplot(price.resamples, metric="RMSE")
+bwplot(price.resamples, metric="Rsquared")
+```
+
+```{r Training Results}
+
+#Clearly, the regression trees perform better than the regression models.
+##Let us test the performance of these trees on the test set.
+
+```
+
+```{r Preprocessing Test Set}
+# Removing correlated predictors
+library(corrplot)
+
+#first create correlation matrix of variables
+corr_matrix_test <-  cor(ab_nyc_test_iv)
+
+#looking at variables with high correlation
+high_corr_test <- findCorrelation(corr_matrix_test, cutoff = .75)
+
+#filter out these variables from dataset
+test_iv_nocorr <- ab_nyc_test_iv[,-high_corr_test]
+
+#Pre-processing using CARET
+
+library(AppliedPredictiveModeling)
+library(e1071)
+pp_no_nzv3 <- preProcess(test_iv_nocorr, 
+                        method = c("center", "scale", "BoxCox", "nzv"))
+pp_no_nzv3
+test_transformed <- predict(pp_no_nzv3, newdata = test_iv_nocorr)
+head(test_transformed)
+
+```
+
+
+
+```{r Copying back the dependent variable}
+test_transformed$price <- ab_nyc_test$price
+
+# Here we form a list of the tree models that we want to run on our test dataset
+tree_models<- list("DecisionTree"=train_rpart,
+              "BaggingTree"=train_bag, "BoostingTree"=train_boost)
+
+```
+
+
+```{r Creating Test Performance Function}
+#creating function called testPerformance to run against each model
+#to measure test performance
+testPerformance <- function(tree_model) {
+    #evaluate  performance
+  postResample(predict(tree_model, test_transformed), test_transformed$price)
+}
+
+#apply the test performance function against each of the models in the list
+test_metrics <- lapply(tree_models,testPerformance)
+test_metrics
+
+```
+
+
+```{r Creating a table for test metrics}
+metrics <- matrix(c(152.8525479,0.6820547, 141.9075464, 0.7283031, 125.1769627, 0.8271524),ncol=2,byrow=TRUE)
+colnames(metrics) <- c("RMSE", "Rsquared")
+rownames(metrics) <- c("DecisionTree", "BaggingTree", "BoostingTree")
+metrics <- as.table(metrics)
+metrics
+     
+```
+```{r Plotting these metrics}
+# plot for rmse
+barplot(metrics[,1],ylab = "RMSE Value",col= rainbow(3),
+        main="Performance metrics on Test Set")
+
+#plot for rsquared
+barplot(metrics[,2],ylab = "Rsquared Value",ylim = c(0,1),col= rainbow(3),
+        main="Performance metrics on Test Set")
+
+##Thus, boosting tree comes out to be the best performing model in terms of RMSE and Rsquared values.
+```
